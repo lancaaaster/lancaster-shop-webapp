@@ -3,77 +3,201 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AutoShop Mini App</title>
+    <title>Lancaster Games Shop</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
+        :root {
+            --tg-theme-button-color: #2ea6ff;
+            --tg-theme-button-text-color: #ffffff;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             margin: 0;
-            padding: 16px;
+            padding: 0;
             color: var(--tg-theme-text-color);
             background: var(--tg-theme-bg-color);
         }
+
         .container {
-            max-width: 600px;
+            max-width: 800px;
             margin: 0 auto;
+            padding: 16px;
         }
+
         .header {
+            position: sticky;
+            top: 0;
+            background: var(--tg-theme-bg-color);
+            padding: 16px;
+            border-bottom: 1px solid var(--tg-theme-hint-color);
+            z-index: 100;
             display: flex;
             justify-content: space-between;
             align-items: center;
+        }
+
+        .categories {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding: 10px 0;
             margin-bottom: 20px;
         }
-        .refresh-btn {
+
+        .category-btn {
+            background: var(--tg-theme-secondary-bg-color);
+            color: var(--tg-theme-text-color);
+            border: none;
+            border-radius: 20px;
+            padding: 8px 16px;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .category-btn.active {
             background: var(--tg-theme-button-color);
             color: var(--tg-theme-button-text-color);
-            border: none;
-            border-radius: 8px;
-            padding: 8px 16px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
         }
+
+        .products-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px;
+            padding: 20px 0;
+        }
+
         .product-card {
             background: var(--tg-theme-secondary-bg-color);
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 15px;
+            border-radius: 12px;
+            overflow: hidden;
             transition: transform 0.2s;
+            display: flex;
+            flex-direction: column;
         }
+
         .product-card:hover {
-            transform: translateY(-2px);
+            transform: translateY(-4px);
         }
+
+        .product-image {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+        }
+
+        .product-info {
+            padding: 15px;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .product-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            margin: 0 0 8px 0;
+        }
+
+        .product-description {
+            font-size: 0.9em;
+            color: var(--tg-theme-hint-color);
+            margin-bottom: 12px;
+            flex-grow: 1;
+        }
+
+        .product-price {
+            font-weight: bold;
+            color: var(--tg-theme-button-color);
+            margin-bottom: 12px;
+        }
+
         .button {
             background: var(--tg-theme-button-color);
             color: var(--tg-theme-button-text-color);
             border: none;
             border-radius: 8px;
-            padding: 10px 20px;
+            padding: 10px;
             cursor: pointer;
             width: 100%;
-            margin-top: 10px;
             transition: opacity 0.2s;
+            font-weight: 500;
         }
+
         .button:hover {
             opacity: 0.9;
         }
-        .price {
-            font-weight: bold;
+
+        .cart-badge {
+            background: var(--tg-theme-button-color);
+            color: var(--tg-theme-button-text-color);
+            border-radius: 50%;
+            padding: 4px 8px;
+            font-size: 12px;
+            position: absolute;
+            top: -8px;
+            right: -8px;
+        }
+
+        .cart-icon {
+            position: relative;
+            cursor: pointer;
+        }
+
+        #search {
+            background: var(--tg-theme-secondary-bg-color);
+            border: none;
+            border-radius: 8px;
+            padding: 8px 16px;
             color: var(--tg-theme-text-color);
-            margin: 10px 0;
+            width: 200px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+
+        @media (max-width: 600px) {
+            .products-grid {
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                gap: 10px;
+            }
+            
+            .product-title {
+                font-size: 1em;
+            }
+            
+            .product-description {
+                font-size: 0.8em;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>AutoShop</h1>
-            <button class="refresh-btn" onclick="refreshProducts()">
-                🔄 Обновить
-            </button>
+    <div class="header">
+        <h1>Lancaster Games</h1>
+        <div style="display: flex; gap: 16px; align-items: center;">
+            <input type="search" id="search" placeholder="Поиск игр...">
+            <div class="cart-icon" onclick="openCart()">
+                🛒
+                <span class="cart-badge" id="cartCount">0</span>
+            </div>
         </div>
-        <div id="products"></div>
+    </div>
+
+    <div class="container">
+        <div class="categories" id="categories">
+            <button class="category-btn active" data-category="all">Все</button>
+            <button class="category-btn" data-category="pc">PC</button>
+            <button class="category-btn" data-category="ps">PlayStation</button>
+            <button class="category-btn" data-category="xbox">Xbox</button>
+            <button class="category-btn" data-category="nintendo">Nintendo</button>
+            <button class="category-btn" data-category="mobile">Мобильные</button>
+        </div>
+
+        <div class="products-grid" id="products"></div>
     </div>
 
     <script>
@@ -83,56 +207,147 @@
 
         // Пример данных о товарах
         const products = [
-            { id: 1, name: "Товар 1", price: "100₽", description: "Описание товара 1" },
-            { id: 2, name: "Товар 2", price: "200₽", description: "Описание товара 2" },
-            { id: 3, name: "Товар 3", price: "300₽", description: "Описание товара 3" }
+            {
+                id: 1,
+                name: "Cyberpunk 2077",
+                price: 1999,
+                description: "Открытый мир в жанре экшен-РПГ",
+                image: "https://upload.wikimedia.org/wikipedia/ru/b/bb/Cyberpunk_2077_CD_Projekt_RED.jpg",
+                category: "pc"
+            },
+            {
+                id: 2,
+                name: "God of War Ragnarök",
+                price: 4499,
+                description: "Продолжение саги о Кратосе",
+                image: "https://upload.wikimedia.org/wikipedia/ru/6/6d/God_of_War_Ragnar%C3%B6k_cover.jpg",
+                category: "ps"
+            },
+            {
+                id: 3,
+                name: "The Legend of Zelda: TOTK",
+                price: 4299,
+                description: "Новое приключение в мире Хайрула",
+                image: "https://upload.wikimedia.org/wikipedia/ru/1/1f/The_Legend_of_Zelda_Tears_of_the_Kingdom_cover.jpg",
+                category: "nintendo"
+            }
         ];
+
+        let cart = [];
+        let currentCategory = 'all';
+        let searchQuery = '';
+
+        function updateCartBadge() {
+            document.getElementById('cartCount').textContent = cart.length;
+        }
+
+        function filterProducts() {
+            return products.filter(product => {
+                const matchesCategory = currentCategory === 'all' || product.category === currentCategory;
+                const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                   product.description.toLowerCase().includes(searchQuery.toLowerCase());
+                return matchesCategory && matchesSearch;
+            });
+        }
 
         function displayProducts() {
             const productsContainer = document.getElementById('products');
-            productsContainer.innerHTML = ''; // Очищаем контейнер
+            productsContainer.innerHTML = '';
 
-            products.forEach(product => {
+            const filteredProducts = filterProducts();
+
+            filteredProducts.forEach(product => {
                 const productCard = document.createElement('div');
                 productCard.className = 'product-card';
                 productCard.innerHTML = `
-                    <h3>${product.name}</h3>
-                    <p>${product.description}</p>
-                    <div class="price">Цена: ${product.price}</div>
-                    <button class="button" onclick="buyProduct(${product.id})">Купить</button>
+                    <img src="${product.image}" alt="${product.name}" class="product-image">
+                    <div class="product-info">
+                        <h3 class="product-title">${product.name}</h3>
+                        <p class="product-description">${product.description}</p>
+                        <div class="product-price">${product.price}₽</div>
+                        <button class="button" onclick="addToCart(${product.id})">В корзину</button>
+                    </div>
                 `;
                 productsContainer.appendChild(productCard);
             });
         }
 
-        // Функция обновления товаров
-        function refreshProducts() {
-            // Здесь можно добавить анимацию загрузки
-            displayProducts();
-            // Можно добавить уведомление об успешном обновлении
+        function addToCart(productId) {
+            const product = products.find(p => p.id === productId);
+            if (product) {
+                cart.push(product);
+                updateCartBadge();
+                tg.showPopup({
+                    title: 'Товар добавлен',
+                    message: `${product.name} добавлен в корзину`,
+                    buttons: [{type: 'ok'}]
+                });
+            }
+        }
+
+        function openCart() {
+            if (cart.length === 0) {
+                tg.showPopup({
+                    title: 'Корзина пуста',
+                    message: 'Добавьте товары в корзину',
+                    buttons: [{type: 'ok'}]
+                });
+                return;
+            }
+
+            const total = cart.reduce((sum, product) => sum + product.price, 0);
+            const cartItems = cart.map(product => `${product.name} - ${product.price}₽`).join('\\n');
+
             tg.showPopup({
-                title: 'Обновлено',
-                message: 'Список товаров успешно обновлен',
-                buttons: [{type: 'ok'}]
+                title: 'Корзина',
+                message: `${cartItems}\\n\\nИтого: ${total}₽`,
+                buttons: [
+                    {type: 'ok', text: 'Продолжить покупки'},
+                    {type: 'destructive', text: 'Очистить корзину', id: 'clear_cart'},
+                    {type: 'default', text: 'Оформить заказ', id: 'checkout'}
+                ]
             });
         }
 
-        // Функция покупки
-        function buyProduct(productId) {
-            tg.sendData(JSON.stringify({
-                action: 'buy',
-                productId: productId
-            }));
-        }
+        // Обработчики событий
+        document.getElementById('search').addEventListener('input', (e) => {
+            searchQuery = e.target.value;
+            displayProducts();
+        });
 
-        // Инициализация при загрузке
+        document.querySelectorAll('.category-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                document.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+                currentCategory = button.dataset.category;
+                displayProducts();
+            });
+        });
+
+        // Обработка событий от Telegram
+        tg.onEvent('popupClosed', (event) => {
+            if (event.button_id === 'clear_cart') {
+                cart = [];
+                updateCartBadge();
+            } else if (event.button_id === 'checkout') {
+                const orderData = {
+                    action: 'checkout',
+                    items: cart,
+                    total: cart.reduce((sum, product) => sum + product.price, 0)
+                };
+                tg.sendData(JSON.stringify(orderData));
+            }
+        });
+
+        // Инициализация
         displayProducts();
+        updateCartBadge();
 
-        // Устанавливаем цвет основной кнопки
+        // MainButton
         if (tg.MainButton) {
-            tg.MainButton.text = "Закрыть";
-            tg.MainButton.show();
-            tg.MainButton.onClick(() => tg.close());
+            tg.MainButton.setText('Перейти в корзину');
+            tg.MainButton.onClick(() => openCart());
+            cart.length > 0 ? tg.MainButton.show() : tg.MainButton.hide();
         }
     </script>
 </body>
