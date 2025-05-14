@@ -1,285 +1,443 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lancaster Games Shop</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        :root {
-            --tg-theme-bg-color: #ffffff;
-            --tg-theme-text-color: #000000;
-            --tg-theme-hint-color: #999999;
-            --tg-theme-link-color: #2481cc;
-            --tg-theme-button-color: #2481cc;
-            --tg-theme-button-text-color: #ffffff;
-            --primary-color: #2481cc;
-            --secondary-color: #f5f5f5;
-            --accent-color: #ff6b6b;
+using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using System.Xml.Xsl;
+using Telegram.Bot;
+using Telegram.Bot.Exceptions;
+using Telegram.Bot.Polling;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
+using TelegramBot.Data;
+
+namespace TelegramBot.TelegramAPI
+{
+    public enum ChatState : ushort
+    {
+        Standard = 0,
+        GetEmail = 1,
+        GetCode = 2,
+        GetDoc = 3,
+        GetTag = 4,
+        GetData = 5,
+        AskData = 6,
+        Default = 7,
+        WaitingForData = 8,
+    }
+    public struct Question
+    {
+        public ChatId Receiver;
+        public string Message;
+        public int PurchaseId;
+        public string Answer;
+        public string ReturnTag;
+
+        public static Question New(ChatId chat, string message, int purchaseId)
+        {
+            return new Question() { Receiver = chat, Message = message, PurchaseId = purchaseId };
+        }
+    }
+    public class TelegramBot
+    {
+        public long GroupId { get; set; } = -1002007072435;
+        public static TelegramBot? CurrentBot { get;set; }
+        public List<Message> PreviousMessages { get; set; } = new List<Message>();
+        public List<Message> ToDelete { get; set; } = new List<Message>();
+        public Dictionary<ChatId, int> CurrentPurchase { get; set; } = new Dictionary<ChatId, int>();
+        public Dictionary<ChatId,Purchase> GoingToBuy { get;set;} = new Dictionary<ChatId,Purchase>();
+        public Dictionary<ChatId, ChatState> ChatStates { get; set; } = new Dictionary<ChatId, ChatState>();
+        public Dictionary<ChatId,Question> AskDataStates { get; set; } = new Dictionary<ChatId, Question>();
+        public Dictionary<ChatId, List<Item>> Cart { get; set; } = new Dictionary<ChatId, List<Item>>();
+        public BotDataContext Context { get; set; } = new BotDataContext();
+        private readonly ITelegramBotClient _botClient;
+        private readonly ReceiverOptions _receiverOptions;
+
+        public TelegramBot(string token)
+        {
+            _botClient = new TelegramBotClient(token);
+            TelegramRoutes.Bot = this;
+            _receiverOptions = new ReceiverOptions
+            {
+                AllowedUpdates = new[]
+                {
+                    UpdateType.Message,
+                    UpdateType.CallbackQuery,
+                    UpdateType.ChannelPost,
+                },
+                ThrowPendingUpdates = true
+            };
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        public async Task Start()
+        {
+            using var cts = new CancellationTokenSource();
+            TelegramRoutes.Bot = this;
+            _ = StartCleaning(60 * 60);
+            
+            _botClient.StartReceiving(
+                updateHandler: HandleUpdateAsync,
+                pollingErrorHandler: HandleErrorAsync,
+                receiverOptions: _receiverOptions,
+                cancellationToken: cts.Token
+            );
+            
+            await Utils.Log("Bot started", ConsoleColor.DarkGreen);
+            await Task.Delay(-1);
         }
 
-        body {
-            background-color: var(--tg-theme-bg-color);
-            color: var(--tg-theme-text-color);
-            min-height: 100vh;
-            padding-bottom: 60px;
-        }
+        private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (update.Type == UpdateType.CallbackQuery && update.CallbackQuery?.Data != null)
+                {
+                    await Utils.Log($"Callback query {update.CallbackQuery.Data}", ConsoleColor.DarkBlue);
+                    await SetRoute(update.CallbackQuery.Data, update.CallbackQuery.Message?.Chat.Id ?? 0);
+                    return;
+                }
 
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-        }
+                if (update.Type == UpdateType.Message && update.Message?.Chat != null)
+                {
+                    if (update.Message.Chat.Id == GroupId) return;
+                    
+                    await Utils.Log($"Text message {update.Message.Chat.Id}", ConsoleColor.DarkBlue);
+                    var updateMessage = update.Message.Text ?? string.Empty;
+                    var chat = update.Message.Chat;
 
-        .header {
-            text-align: center;
-            padding: 20px 0;
-            margin-bottom: 30px;
-        }
+                    if (string.IsNullOrEmpty(updateMessage)) return;
 
-        .header h1 {
-            font-size: 24px;
-            margin-bottom: 10px;
-        }
+                    if (!ChatStates.ContainsKey(chat.Id))
+                    {
+                        ChatStates[chat.Id] = ChatState.Default;
+                    }
 
-        .categories {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
+                    if (Utils.IsValidTelegramTag(updateMessage))
+                    {
+                        await SetRoute(updateMessage, chat.Id);
+                        return;
+                    }
 
-        .category-card {
-            background: var(--secondary-color);
-            border-radius: 12px;
-            padding: 15px;
-            text-align: center;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
+                    if (ChatStates[chat.Id] == ChatState.Default)
+                    {
+                        await SetRoute("menu", chat.Id);
+                        return;
+                    }
 
-        .category-card:hover {
-            transform: translateY(-5px);
-        }
+                    if (ChatStates[chat.Id] == ChatState.WaitingForData)
+                    {
+                        if (!AskDataStates.ContainsKey(chat.Id))
+                        {
+                            ChatStates[chat.Id] = ChatState.Default;
+                            await SetRoute("menu", chat.Id);
+                            return;
+                        }
 
-        .category-card img {
-            width: 64px;
-            height: 64px;
-            margin-bottom: 10px;
-        }
-
-        .products {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-        }
-
-        .product-card {
-            background: var(--secondary-color);
-            border-radius: 12px;
-            padding: 15px;
-            text-align: center;
-        }
-
-        .product-card img {
-            width: 100%;
-            height: 150px;
-            object-fit: cover;
-            border-radius: 8px;
-            margin-bottom: 10px;
-        }
-
-        .product-card h3 {
-            font-size: 16px;
-            margin-bottom: 8px;
-        }
-
-        .product-card .price {
-            font-size: 18px;
-            font-weight: bold;
-            color: var(--primary-color);
-            margin-bottom: 12px;
-        }
-
-        .btn {
-            background: var(--tg-theme-button-color);
-            color: var(--tg-theme-button-text-color);
-            border: none;
-            border-radius: 8px;
-            padding: 10px 20px;
-            font-size: 14px;
-            cursor: pointer;
-            transition: opacity 0.2s;
-        }
-
-        .btn:hover {
-            opacity: 0.9;
-        }
-
-        .cart {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: var(--tg-theme-bg-color);
-            padding: 15px;
-            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .cart-total {
-            font-size: 16px;
-            font-weight: bold;
-        }
-
-        .special-offer {
-            position: relative;
-            overflow: hidden;
-        }
-
-        .special-offer::before {
-            content: "🔥 Акция";
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: var(--accent-color);
-            color: white;
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 12px;
-        }
-
-        @media (max-width: 600px) {
-            .container {
-                padding: 10px;
+                        var question = AskDataStates[chat.Id];
+                        question.Answer = updateMessage;
+                        await SetRoute(question.ReturnTag, chat.Id);
+                        return;
+                    }
+                }
             }
-
-            .categories {
-                grid-template-columns: repeat(2, 1fr);
-            }
-
-            .products {
-                grid-template-columns: repeat(2, 1fr);
+            catch (Exception ex)
+            {
+                await Utils.Log($"Error in update handler: {ex.Message}", ConsoleColor.Red);
             }
         }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <header class="header">
-            <h1>Lancaster Games Shop</h1>
-            <p>Лучшие игры и внутриигровые предметы</p>
-        </header>
 
-        <div class="categories">
-            <div class="category-card" onclick="showCategory('brawl')">
-                <img src="TelegramBot/Resources/brawl.png" alt="Brawl Stars">
-                <h3>Brawl Stars</h3>
-            </div>
-            <div class="category-card" onclick="showCategory('royale')">
-                <img src="TelegramBot/Resources/royale.png" alt="Clash Royale">
-                <h3>Clash Royale</h3>
-            </div>
-            <div class="category-card" onclick="showCategory('clans')">
-                <img src="TelegramBot/Resources/clans.png" alt="Clash of Clans">
-                <h3>Clash of Clans</h3>
-            </div>
-        </div>
-
-        <div class="products" id="products"></div>
-    </div>
-
-    <div class="cart" id="cart">
-        <div class="cart-total">Итого: <span id="cart-total">0</span>₽</div>
-        <button class="btn" onclick="checkout()">Оформить заказ</button>
-    </div>
-
-    <script>
-        let tg = window.Telegram.WebApp;
-        let cart = [];
-        let products = {
-            brawl: [
-                { id: 'brawl1', name: 'Гемы Brawl Stars', price: 299, image: 'TelegramBot/Resources/gems.jpg', special: true },
-                { id: 'brawl2', name: 'Бравл Пасс', price: 449, image: 'TelegramBot/Resources/pass.jpg' },
-                { id: 'brawl3', name: 'Мега ящик', price: 199, image: 'TelegramBot/Resources/box.jpg' }
-            ],
-            royale: [
-                { id: 'royale1', name: 'Сундук с кристаллами', price: 349, image: 'TelegramBot/Resources/chest.jpg', special: true },
-                { id: 'royale2', name: 'Пропуск', price: 499, image: 'TelegramBot/Resources/royale_pass.jpg' }
-            ],
-            clans: [
-                { id: 'clans1', name: 'Набор кристаллов', price: 399, image: 'TelegramBot/Resources/gems_coc.jpg', special: true },
-                { id: 'clans2', name: 'Золото', price: 299, image: 'TelegramBot/Resources/gold.jpg' }
-            ]
-        };
-
-        tg.expand();
-        tg.enableClosingConfirmation();
-
-        function showCategory(category) {
-            const productsContainer = document.getElementById('products');
-            productsContainer.innerHTML = '';
-
-            products[category].forEach(product => {
-                const card = document.createElement('div');
-                card.className = `product-card ${product.special ? 'special-offer' : ''}`;
-                card.innerHTML = `
-                    <img src="${product.image}" alt="${product.name}">
-                    <h3>${product.name}</h3>
-                    <div class="price">${product.price}₽</div>
-                    <button class="btn" onclick="addToCart('${product.id}', '${product.name}', ${product.price})">
-                        В корзину
-                    </button>
-                `;
-                productsContainer.appendChild(card);
-            });
+        private Task HandleErrorAsync(ITelegramBotClient botClient, Exception error, CancellationToken cancellationToken)
+        {
+            if (error is ApiRequestException apiRequestException)
+            {
+                return Utils.Log($"Telegram API Error:\n[{apiRequestException.ErrorCode}]\n{apiRequestException.Message}", ConsoleColor.Red);
+            }
+            
+            return Utils.Log($"Error: {error.Message}", ConsoleColor.Red);
         }
 
-        function addToCart(id, name, price) {
-            cart.push({ id, name, price });
-            updateCart();
-            tg.HapticFeedback.impactOccurred('light');
+        private async Task StartCleaning(int seconds)
+        {
+            while (true)
+            {
+                await Task.Delay(seconds * 1000);
+                var toDelete = ToDelete.ToList();
+                ToDelete.Clear();
+                foreach (var message in toDelete)
+                {
+                    try
+                    {
+                        if (message?.Chat?.Id != null)
+                        {
+                            await _botClient.DeleteMessageAsync(message.Chat.Id, message.MessageId);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        await Utils.Log($"Error deleting message: {ex.Message}", ConsoleColor.Red);
+                    }
+                }
+            }
         }
 
-        function updateCart() {
-            const total = cart.reduce((sum, item) => sum + item.price, 0);
-            document.getElementById('cart-total').textContent = total;
+        public async Task SetRoute(string route, ChatId chat)
+        {
+            await TelegramRoutes.GetRenderByRoute(route, _botClient, chat);
         }
 
-        function checkout() {
-            if (cart.length === 0) {
-                tg.showPopup({
-                    title: 'Корзина пуста',
-                    message: 'Добавьте товары в корзину для оформления заказа',
-                    buttons: [{type: 'ok'}]
-                });
+        private static ReplyKeyboardMarkup GetMainKeyboard()
+        {
+            return new ReplyKeyboardMarkup(new[]
+            {
+                new[] 
+                { 
+                    KeyboardButton.WithWebApp("Открыть магазин", 
+                        new WebAppInfo { Url = "https://lancaaaster.github.io/lancaster-shop-webapp/" })
+                }
+            })
+            {
+                ResizeKeyboard = true
+            };
+        }
+
+        public async Task ClearCart(ChatId chat, bool showMessage = true)
+        {
+            if (!Cart.ContainsKey(chat))
+            {
+                Cart[chat] = new List<Item>();
+                if (showMessage)
+                {
+                    await SendEmptyCartMessage(chat, true);
+                }
                 return;
             }
 
-            const total = cart.reduce((sum, item) => sum + item.price, 0);
-            tg.MainButton.text = `Оплатить ${total}₽`;
-            tg.MainButton.show();
-
-            tg.onEvent('mainButtonClicked', () => {
-                tg.sendData(JSON.stringify({
-                    action: 'checkout',
-                    items: cart,
-                    total: total
-                }));
-            });
+            bool isEmpty = Cart[chat].Count == 0;
+            Cart[chat].Clear();
+            
+            if (showMessage)
+            {
+                await SendEmptyCartMessage(chat, isEmpty);
+            }
         }
 
-        // Показываем категорию Brawl Stars по умолчанию
-        showCategory('brawl');
-    </script>
-</body>
-</html> 
+        private async Task SendEmptyCartMessage(ChatId chat, bool wasEmpty)
+        {
+            var inlineKeyboard = new InlineKeyboardMarkup(
+                new[]
+                {
+                    new[]
+                    {
+                        InlineKeyboardButton.WithCallbackData("Назад", "main"),
+                    },
+                });
+            
+            string message = "Корзина теперь пуста!" + (wasEmpty ? "\r\nНо до этого она тоже была пустой :(" : string.Empty);
+            await _botClient.SendTextMessageAsync(chat, message, replyMarkup: inlineKeyboard);
+        }
+
+        public async Task HandleUpdate(Update update)
+        {
+            try
+            {
+                if (update.Message?.WebAppData != null)
+                {
+                    await HandleWebAppUpdate(update);
+                    return;
+                }
+
+                if (update.Message?.Chat != null)
+                {
+                    if (update.Message.Text == "Корзина")
+                    {
+                        await ShowCart(update.Message.Chat.Id);
+                        return;
+                    }
+                    
+                    if (update.Message.Text == "Помощь")
+                    {
+                        await ShowHelp(update.Message.Chat.Id);
+                        return;
+                    }
+
+                    await _botClient.SendTextMessageAsync(
+                        update.Message.Chat.Id,
+                        "Добро пожаловать в Lancaster Games Shop! 🎮\n\n" +
+                        "У нас вы найдете:\n" +
+                        "🎯 Лучшие игры для всех платформ\n" +
+                        "💎 Внутриигровые предметы\n" +
+                        "🎁 Подарочные карты\n\n" +
+                        "Нажмите кнопку ниже, чтобы открыть магазин:",
+                        replyMarkup: GetKeyboard()
+                    );
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                await Utils.Log($"Error in HandleUpdate: {ex.Message}", ConsoleColor.Red);
+                if (update.Message?.Chat != null)
+                {
+                    await Owner.OwnerAPI.NotifyOnwers(_botClient, $"❌ Ошибка при обработке заказа:\n{ex.Message}");
+                }
+            }
+        }
+
+        private ReplyKeyboardMarkup GetKeyboard()
+        {
+            return new ReplyKeyboardMarkup(new[]
+            {
+                new[] 
+                { 
+                    KeyboardButton.WithWebApp("Открыть магазин", 
+                        new WebAppInfo { Url = "https://lancaaaster.github.io/lancaster-shop-webapp/" })
+                },
+                new[] { new KeyboardButton("Корзина") },
+                new[] { new KeyboardButton("Помощь") }
+            })
+            {
+                ResizeKeyboard = true
+            };
+        }
+
+        private async Task HandleWebAppUpdate(Update update)
+        {
+            if (update.Message?.WebAppData == null) return;
+
+            try
+            {
+                var data = JsonConvert.DeserializeObject<dynamic>(update.Message.WebAppData.Data);
+                
+                if (data?.action == "checkout")
+                {
+                    decimal total = data.total;
+                    var items = JsonConvert.DeserializeObject<List<dynamic>>(data.items.ToString());
+                    
+                    var purchase = await CreatePurchase(update.Message.Chat, total, items);
+                    await NotifyUser(update.Message.Chat.Id, purchase, total);
+                    await NotifyOwners(purchase);
+                }
+            }
+            catch (Exception ex)
+            {
+                await Utils.Log($"Error in HandleWebAppUpdate: {ex.Message}", ConsoleColor.Red);
+                if (update.Message?.Chat != null)
+                {
+                    await Owner.OwnerAPI.NotifyOnwers(_botClient, $"❌ Ошибка при обработке заказа из веб-приложения:\n{ex.Message}");
+                }
+            }
+        }
+
+        private async Task<Purchase> CreatePurchase(Chat chat, decimal total, List<dynamic> items)
+        {
+            var purchase = new Purchase
+            {
+                Identifier = await GenerateUniqueIdentifier(),
+                IndexNumber = Context.Purchases.Count(),
+                Cost = (ulong)total,
+                CustomerID = chat.Id,
+                CustomerName = chat.Username,
+                PaymentSystem = "Web App",
+                Goods = items.Select(item => ((string)item.id)).ToList(),
+                Data = $"Заказ из веб-приложения:\n" + 
+                       string.Join("\n", items.Select(item => $"- {(string)item.name}: {(decimal)item.price}₽"))
+            };
+
+            await Context.Purchases.AddAsync(purchase.ToDataModel());
+            await Context.SaveChangesAsync();
+
+            return purchase;
+        }
+
+        private async Task<int> GenerateUniqueIdentifier()
+        {
+            var identifier = new Random().Next();
+            while (await Context.Purchases.AnyAsync(v => v.Identifier == identifier))
+            {
+                identifier = new Random().Next();
+            }
+            return identifier;
+        }
+
+        private async Task NotifyUser(ChatId chatId, Purchase purchase, decimal total)
+        {
+            await _botClient.SendTextMessageAsync(
+                chatId,
+                $"✅ Заказ создан!\n" +
+                $"🆔 Номер заказа: {purchase.Identifier}\n" +
+                $"💰 Сумма: {total}₽\n" +
+                $"📦 Товары:\n{purchase.Data}"
+            );
+        }
+
+        private async Task NotifyOwners(Purchase purchase)
+        {
+            var inlineKeyboard = new InlineKeyboardMarkup(
+                new[]
+                {
+                    new[]
+                    {
+                        InlineKeyboardButton.WithCallbackData("Перейти к заказу", $"show|{purchase.Identifier}"),
+                    },
+                });
+
+            await Owner.OwnerAPI.NotifyOnwers(_botClient, 
+                $"🔔 Новый заказ из веб-приложения!\n" +
+                $"👤 Заказ: {purchase.IndexNumber}, ID: {purchase.Identifier}\n" +
+                $"🏦 Способ оплаты: {purchase.PaymentSystem}\n" +
+                $"🛍 Товары:\n{Utils.GetGoodsString(purchase)}\n" +
+                $"💰 Цена: {purchase.Cost}₽", 
+                markup: inlineKeyboard);
+        }
+
+        private async Task ShowCart(ChatId chatId)
+        {
+            if (!Cart.ContainsKey(chatId) || Cart[chatId].Count == 0)
+            {
+                await _botClient.SendTextMessageAsync(
+                    chatId,
+                    "🛒 Ваша корзина пуста.\n" +
+                    "Нажмите кнопку 'Открыть магазин', чтобы добавить товары.",
+                    replyMarkup: GetKeyboard()
+                );
+                return;
+            }
+
+            var cartItems = Cart[chatId];
+            var message = "🛒 Ваша корзина:\n\n";
+            decimal total = 0;
+
+            foreach (var item in cartItems)
+            {
+                message += $"• {item.Name} - {item.Price}₽\n";
+                total += item.Price;
+            }
+
+            message += $"\nОбщая сумма: {total}₽";
+
+            await _botClient.SendTextMessageAsync(
+                chatId,
+                message,
+                replyMarkup: GetKeyboard()
+            );
+        }
+
+        private async Task ShowHelp(ChatId chatId)
+        {
+            await _botClient.SendTextMessageAsync(
+                chatId,
+                "ℹ️ Помощь по использованию бота:\n\n" +
+                "1. Нажмите кнопку 'Открыть магазин' для просмотра доступных товаров\n" +
+                "2. Выберите интересующие вас товары\n" +
+                "3. Добавьте их в корзину\n" +
+                "4. Перейдите в корзину для оформления заказа\n\n" +
+                "По всем вопросам обращайтесь к @support",
+                replyMarkup: GetKeyboard()
+            );
+        }
+    }
+}
