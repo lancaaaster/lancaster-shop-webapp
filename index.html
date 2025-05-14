@@ -17,11 +17,32 @@
             max-width: 600px;
             margin: 0 auto;
         }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .refresh-btn {
+            background: var(--tg-theme-button-color);
+            color: var(--tg-theme-button-text-color);
+            border: none;
+            border-radius: 8px;
+            padding: 8px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
         .product-card {
             background: var(--tg-theme-secondary-bg-color);
             border-radius: 10px;
             padding: 15px;
             margin-bottom: 15px;
+            transition: transform 0.2s;
+        }
+        .product-card:hover {
+            transform: translateY(-2px);
         }
         .button {
             background: var(--tg-theme-button-color);
@@ -32,12 +53,26 @@
             cursor: pointer;
             width: 100%;
             margin-top: 10px;
+            transition: opacity 0.2s;
+        }
+        .button:hover {
+            opacity: 0.9;
+        }
+        .price {
+            font-weight: bold;
+            color: var(--tg-theme-text-color);
+            margin: 10px 0;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>AutoShop</h1>
+        <div class="header">
+            <h1>AutoShop</h1>
+            <button class="refresh-btn" onclick="refreshProducts()">
+                🔄 Обновить
+            </button>
+        </div>
         <div id="products"></div>
     </div>
 
@@ -48,23 +83,39 @@
 
         // Пример данных о товарах
         const products = [
-            { id: 1, name: "Товар 1", price: "100₽" },
-            { id: 2, name: "Товар 2", price: "200₽" },
-            { id: 3, name: "Товар 3", price: "300₽" }
+            { id: 1, name: "Товар 1", price: "100₽", description: "Описание товара 1" },
+            { id: 2, name: "Товар 2", price: "200₽", description: "Описание товара 2" },
+            { id: 3, name: "Товар 3", price: "300₽", description: "Описание товара 3" }
         ];
 
-        // Отображаем товары
-        const productsContainer = document.getElementById('products');
-        products.forEach(product => {
-            const productCard = document.createElement('div');
-            productCard.className = 'product-card';
-            productCard.innerHTML = `
-                <h3>${product.name}</h3>
-                <p>Цена: ${product.price}</p>
-                <button class="button" onclick="buyProduct(${product.id})">Купить</button>
-            `;
-            productsContainer.appendChild(productCard);
-        });
+        function displayProducts() {
+            const productsContainer = document.getElementById('products');
+            productsContainer.innerHTML = ''; // Очищаем контейнер
+
+            products.forEach(product => {
+                const productCard = document.createElement('div');
+                productCard.className = 'product-card';
+                productCard.innerHTML = `
+                    <h3>${product.name}</h3>
+                    <p>${product.description}</p>
+                    <div class="price">Цена: ${product.price}</div>
+                    <button class="button" onclick="buyProduct(${product.id})">Купить</button>
+                `;
+                productsContainer.appendChild(productCard);
+            });
+        }
+
+        // Функция обновления товаров
+        function refreshProducts() {
+            // Здесь можно добавить анимацию загрузки
+            displayProducts();
+            // Можно добавить уведомление об успешном обновлении
+            tg.showPopup({
+                title: 'Обновлено',
+                message: 'Список товаров успешно обновлен',
+                buttons: [{type: 'ok'}]
+            });
+        }
 
         // Функция покупки
         function buyProduct(productId) {
@@ -73,6 +124,9 @@
                 productId: productId
             }));
         }
+
+        // Инициализация при загрузке
+        displayProducts();
 
         // Устанавливаем цвет основной кнопки
         if (tg.MainButton) {
