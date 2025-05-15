@@ -1,132 +1,198 @@
 let tg = window.Telegram.WebApp;
 let cart = [];
 
-// Инициализация Telegram WebApp
-tg.expand();
-tg.enableClosingConfirmation();
+// Инициализация при загрузке страницы
+document.addEventListener('DOMContentLoaded', () => {
+    tg.expand();
+    tg.enableClosingConfirmation();
 
-// Данные о товарах
-const products = {
-    brawl_stars: [
-        { id: 'bs_gems_30', name: '30 Гемов', price: 39, image: 'img/bs_gems.jpg', category: 'brawl_stars' },
-        { id: 'bs_gems_80', name: '80 Гемов', price: 99, image: 'img/bs_gems.jpg', category: 'brawl_stars' },
-        { id: 'bs_gems_170', name: '170 Гемов', price: 229, image: 'img/bs_gems.jpg', category: 'brawl_stars' },
-        { id: 'bs_gems_360', name: '360 Гемов', price: 449, image: 'img/bs_gems.jpg', category: 'brawl_stars' },
-        { id: 'bs_gems_950', name: '950 Гемов', price: 1190, image: 'img/bs_gems.jpg', category: 'brawl_stars' },
-        { id: 'bs_pass', name: 'Brawl Pass', price: 269, image: 'img/bs_pass.jpg', category: 'brawl_stars' }
-    ],
-    clash_royale: [
-        { id: 'cr_gems_80', name: '80 Гемов', price: 99, image: 'img/cr_gems.jpg', category: 'clash_royale' },
-        { id: 'cr_gems_500', name: '500 Гемов', price: 499, image: 'img/cr_gems.jpg', category: 'clash_royale' },
-        { id: 'cr_gems_1200', name: '1200 Гемов', price: 999, image: 'img/cr_gems.jpg', category: 'clash_royale' },
-        { id: 'cr_pass', name: 'Royal Pass', price: 269, image: 'img/cr_pass.jpg', category: 'clash_royale' },
-        { id: 'cr_chest', name: 'Королевский сундук', price: 199, image: 'img/cr_chest.jpg', category: 'clash_royale' }
-    ],
-    clash_of_clans: [
-        { id: 'coc_gems_80', name: '80 Гемов', price: 99, image: 'img/coc_gems.jpg', category: 'clash_of_clans' },
-        { id: 'coc_gems_500', name: '500 Гемов', price: 499, image: 'img/coc_gems.jpg', category: 'clash_of_clans' },
-        { id: 'coc_gems_1200', name: '1200 Гемов', price: 999, image: 'img/coc_gems.jpg', category: 'clash_of_clans' },
-        { id: 'coc_gold_pass', name: 'Gold Pass', price: 269, image: 'img/coc_pass.jpg', category: 'clash_of_clans' }
-    ]
-};
-
-// Фильтрация товаров по категории
-function filterByCategory(category) {
-    const productsContainer = document.getElementById('products');
-    productsContainer.innerHTML = '';
+    // Инициализация обработчиков событий
+    initializeEventListeners();
     
-    products[category].forEach(product => {
-        productsContainer.innerHTML += `
-            <div class="col-6 mb-3">
-                <div class="product-card">
-                    <img src="${product.image}" alt="${product.name}" class="img-fluid">
-                    <h4>${product.name}</h4>
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="price">${product.price}₽</span>
-                        <button class="btn btn-primary btn-sm" onclick="addToCart('${product.id}')">В корзину</button>
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-}
+    // Загрузка данных
+    loadGameProducts();
+});
 
-// Добавление товара в корзину
-function addToCart(productId) {
-    let product = findProduct(productId);
-    if (product) {
-        cart.push(product);
-        updateCartCount();
-        tg.HapticFeedback.impactOccurred('light');
-    }
-}
+// Инициализация обработчиков событий
+function initializeEventListeners() {
+    // Кнопки навигации
+    document.getElementById('profileBtn').addEventListener('click', showProfile);
+    document.getElementById('cartBtn').addEventListener('click', showCart);
+    document.getElementById('supportBtn').addEventListener('click', showSupport);
 
-// Поиск товара по ID
-function findProduct(productId) {
-    for (let category in products) {
-        let product = products[category].find(p => p.id === productId);
-        if (product) return product;
-    }
-    return null;
-}
-
-// Обновление счетчика корзины
-function updateCartCount() {
-    document.getElementById('cartCount').textContent = cart.length;
-}
-
-// Показать корзину
-function showCart() {
-    const cartModal = new bootstrap.Modal(document.getElementById('cartModal'));
-    const cartItems = document.getElementById('cartItems');
-    cartItems.innerHTML = '';
-    let total = 0;
-
-    cart.forEach((item, index) => {
-        total += item.price;
-        cartItems.innerHTML += `
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <div>
-                    <h6 class="mb-0">${item.name}</h6>
-                    <small class="text-muted">${item.price}₽</small>
-                </div>
-                <button class="btn btn-danger btn-sm" onclick="removeFromCart(${index})">Удалить</button>
-            </div>
-        `;
-    });
-
-    document.getElementById('totalPrice').textContent = total;
-    cartModal.show();
-}
-
-// Удаление товара из корзины
-function removeFromCart(index) {
-    cart.splice(index, 1);
-    updateCartCount();
-    showCart();
-    tg.HapticFeedback.impactOccurred('light');
-}
-
-// Оформление заказа
-function checkout() {
-    if (cart.length === 0) {
-        tg.showPopup({
-            title: 'Ошибка',
-            message: 'Корзина пуста',
-            buttons: [{type: 'ok'}]
+    // Закрытие модальных окон
+    document.querySelectorAll('.close-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            btn.closest('.modal').style.display = 'none';
         });
-        return;
+    });
+}
+
+// Применяем цветовую схему Telegram
+document.documentElement.style.setProperty('--tg-theme-bg-color', tg.backgroundColor);
+document.documentElement.style.setProperty('--tg-theme-text-color', tg.textColor);
+document.documentElement.style.setProperty('--tg-theme-button-color', tg.buttonColor);
+document.documentElement.style.setProperty('--tg-theme-button-text-color', tg.buttonTextColor);
+
+// Загрузка товаров для каждой игры
+async function loadGameProducts() {
+    try {
+        const [csgoProducts, dotaProducts, rustProducts] = await Promise.all([
+            fetch('/api/products/csgo').then(res => res.json()),
+            fetch('/api/products/dota2').then(res => res.json()),
+            fetch('/api/products/rust').then(res => res.json())
+        ]);
+
+        displayGameProducts('csgoProducts', csgoProducts);
+        displayGameProducts('dotaProducts', dotaProducts);
+        displayGameProducts('rustProducts', rustProducts);
+    } catch (error) {
+        console.error('Ошибка при загрузке товаров:', error);
+        showError('Не удалось загрузить товары');
     }
+}
 
-    let total = cart.reduce((sum, item) => sum + item.price, 0);
+// Отображение товаров для конкретной игры
+function displayGameProducts(containerId, products) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+
+    products.forEach(product => {
+        const productCard = createProductCard(product);
+        container.appendChild(productCard);
+    });
+}
+
+// Создание карточки товара
+function createProductCard(product) {
+    const card = document.createElement('div');
+    card.className = 'product-card';
+    card.innerHTML = `
+        <div class="product-name">${product.name}</div>
+        <div class="product-price">${formatPrice(product.price)}</div>
+        <div class="product-actions">
+            <button class="action-button" onclick="buyNow(${product.id})">
+                <i class="fas fa-bolt"></i>
+            </button>
+            <button class="action-button" onclick="addToCart(${product.id})">
+                <i class="fas fa-cart-plus"></i>
+            </button>
+        </div>
+    `;
+    return card;
+}
+
+// Быстрая покупка
+async function buyNow(productId) {
+    try {
+        const response = await fetch('/api/orders/instant', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ productId })
+        });
+
+        if (response.ok) {
+            showNotification('Товар успешно куплен');
+            tg.close();
+        } else {
+            throw new Error('Ошибка при покупке');
+        }
+    } catch (error) {
+        console.error('Ошибка при покупке:', error);
+        showError('Не удалось совершить покупку');
+    }
+}
+
+// Работа с корзиной
+function addToCart(productId) {
+    const product = findProduct(productId);
+    if (product) {
+        const existingItem = cart.find(item => item.id === productId);
+        if (existingItem) {
+            existingItem.quantity++;
+        } else {
+            cart.push({ ...product, quantity: 1 });
+        }
+        updateCartCount();
+        showNotification('Товар добавлен в корзину');
+    }
+}
+
+function updateCartCount() {
+    const count = cart.reduce((sum, item) => sum + item.quantity, 0);
+    document.getElementById('cartCount').textContent = count;
+}
+
+// Модальные окна
+function showCart() {
+    const modal = document.getElementById('cartModal');
+    const cartItems = document.getElementById('cartItems');
     
-    tg.sendData(JSON.stringify({
-        action: 'checkout',
-        items: cart,
-        total: total
-    }));
+    cartItems.innerHTML = cart.map(item => `
+        <div class="cart-item">
+            <div class="cart-item-name">${item.name}</div>
+            <div class="cart-item-price">${formatPrice(item.price)}</div>
+            <div class="cart-item-quantity">
+                <button onclick="updateCartItemQuantity(${item.id}, -1)">-</button>
+                <span>${item.quantity}</span>
+                <button onclick="updateCartItemQuantity(${item.id}, 1)">+</button>
+            </div>
+        </div>
+    `).join('');
 
-    cart = [];
-    updateCartCount();
-    bootstrap.Modal.getInstance(document.getElementById('cartModal')).hide();
+    modal.style.display = 'block';
+}
+
+function showProfile() {
+    const modal = document.getElementById('profileModal');
+    modal.style.display = 'block';
+}
+
+function showSupport() {
+    const modal = document.getElementById('supportModal');
+    modal.style.display = 'block';
+}
+
+// Вспомогательные функции
+function formatPrice(price) {
+    return new Intl.NumberFormat('ru-RU', {
+        style: 'currency',
+        currency: 'RUB'
+    }).format(price);
+}
+
+function showNotification(message) {
+    tg.showPopup({
+        title: 'Уведомление',
+        message: message
+    });
+}
+
+function showError(message) {
+    tg.showPopup({
+        title: 'Ошибка',
+        message: message
+    });
+}
+
+function contactSupport() {
+    tg.openTelegramLink('https://t.me/support');
+}
+
+function updateCartItemQuantity(productId, change) {
+    const item = cart.find(item => item.id === productId);
+    if (item) {
+        item.quantity += change;
+        if (item.quantity <= 0) {
+            cart = cart.filter(i => i.id !== productId);
+        }
+        updateCartCount();
+        showCart();
+    }
+}
+
+function findProduct(productId) {
+    // Implementation of findProduct function
 } 
