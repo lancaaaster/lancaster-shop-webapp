@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Game Shop</title>
+    <title>Цифровой магазин</title>
     <link rel="stylesheet" href="css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -24,27 +24,19 @@
             </button>
         </nav>
 
-        <div class="game-categories">
-            <div class="game-card">
-                <h2 class="game-title">CS:GO</h2>
-                <div class="products-grid" id="csgoProducts">
-                    <!-- Товары будут добавлены через JavaScript -->
-                </div>
-            </div>
+        <div class="categories">
+            <button class="category-btn active" data-category="all">Все</button>
+            <button class="category-btn" data-category="subscriptions">Подписки</button>
+            <button class="category-btn" data-category="pc-games">PC Игры</button>
+            <button class="category-btn" data-category="mobile-games">Мобильные игры</button>
+        </div>
 
-            <div class="game-card">
-                <h2 class="game-title">DOTA 2</h2>
-                <div class="products-grid" id="dotaProducts">
-                    <!-- Товары будут добавлены через JavaScript -->
-                </div>
-            </div>
+        <div class="subcategories">
+            <!-- Подкатегории будут добавляться динамически через JavaScript -->
+        </div>
 
-            <div class="game-card">
-                <h2 class="game-title">RUST</h2>
-                <div class="products-grid" id="rustProducts">
-                    <!-- Товары будут добавлены через JavaScript -->
-                </div>
-            </div>
+        <div class="products-grid" id="productsContainer">
+            <!-- Товары будут добавлены через JavaScript -->
         </div>
     </div>
 
@@ -56,6 +48,11 @@
                 <button class="close-btn">&times;</button>
             </div>
             <div id="cartItems"></div>
+            <div class="cart-total">
+                <span>Итого:</span>
+                <span id="cartTotal">0 ₽</span>
+            </div>
+            <button id="checkoutBtn" class="checkout-btn">Оформить заказ</button>
         </div>
     </div>
 
@@ -66,7 +63,26 @@
                 <h2>Профиль</h2>
                 <button class="close-btn">&times;</button>
             </div>
-            <div id="profileInfo"></div>
+            <div class="profile-info">
+                <div class="profile-field">
+                    <label>Telegram ID:</label>
+                    <span id="profileTelegramId"></span>
+                </div>
+                <div class="profile-field">
+                    <label>Имя:</label>
+                    <span id="profileName"></span>
+                </div>
+                <div class="profile-field">
+                    <label>Баланс:</label>
+                    <span id="profileBalance"></span>
+                </div>
+            </div>
+            <div class="profile-orders">
+                <h3>История покупок</h3>
+                <div id="ordersList">
+                    <!-- История покупок будет добавлена через JavaScript -->
+                </div>
+            </div>
         </div>
     </div>
 
@@ -78,10 +94,20 @@
                 <button class="close-btn">&times;</button>
             </div>
             <div class="support-content">
-                <p>Для получения помощи напишите нам:</p>
-                <button class="support-btn" onclick="contactSupport()">
-                    <i class="fas fa-paper-plane"></i> Написать в поддержку
-                </button>
+                <div class="support-info">
+                    <h3>Как с нами связаться:</h3>
+                    <p>1. Telegram: <a href="https://t.me/support" target="_blank">@support</a></p>
+                    <p>2. Email: support@example.com</p>
+                    <p>3. Время работы: 24/7</p>
+                </div>
+                <div class="support-actions">
+                    <button class="support-btn" onclick="contactSupport('telegram')">
+                        <i class="fab fa-telegram"></i> Написать в Telegram
+                    </button>
+                    <button class="support-btn" onclick="contactSupport('email')">
+                        <i class="fas fa-envelope"></i> Написать на Email
+                    </button>
+                </div>
             </div>
         </div>
     </div>
